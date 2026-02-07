@@ -37,7 +37,8 @@ interface Config {
     getId: () => string
     storageKey: string
     getAnimeUpdateInfo: (
-      id: string
+      id: string,
+      sm: SubscriptionManager
     ) => Promise<Pick<SubscribedAnime, 'updatedAt' | 'status' | 'last'>>
   }
 }
@@ -289,7 +290,7 @@ export function defineIframePlayer(config: Config) {
     }
 
     try {
-      const animeInfo = await config.subscribe.getAnimeUpdateInfo(id)
+      const animeInfo = await config.subscribe.getAnimeUpdateInfo(id, sm)
       Object.assign(animeInfo, { checkedAt: now })
       sm.updateSubscription(id, animeInfo)
     } catch (error) {}

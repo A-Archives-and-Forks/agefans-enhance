@@ -33,7 +33,7 @@ async function getAnimeUpdateInfo(id: string) {
 
   const $lists = $doc.find('.anthology-list-play')
   const longest = $lists.get().reduce((max, el) => {
-    return max.children.length > el.children.length ? max : el
+    return max.children.length >= el.children.length ? max : el
   }, $lists[0])
   const $last = $(longest).find('li a').last()
 

@@ -1,7 +1,7 @@
 import { runtime } from '../../runtime/index'
 import './index.scss'
 import { mobilePlayModule } from './mobilePlay'
-import { playModule, playModuleInIframe } from './play'
+import { playModule, playModuleInIframe, iframePlayer } from './play'
 
 runtime.register({
   domains: ['age.tv', 'agemys', 'agefans', 'agedm'],
@@ -12,6 +12,8 @@ runtime.register({
         $('body').addClass('agefans-wrapper')
       },
     },
+    { test: '*', run: iframePlayer.subscribe.checkSubscriptionsUpdates },
+    { test: '/', run: iframePlayer.subscribe.renderSubscribedAnimes },
     { test: '/play', run: playModule },
     { test: '/play', run: playModuleInIframe, runInIframe: true },
     { test: () => location.hash.includes('/play/'), run: mobilePlayModule },

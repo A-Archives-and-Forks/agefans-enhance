@@ -1,6 +1,9 @@
+import { closestSameDay } from '../../utils/date'
 import { sleep } from '../../utils/sleep'
 import { local } from '../../utils/storage'
 import { defineIframePlayer } from '../common/defineIframePlayer'
+import T from './subscribe.template.html'
+import mustache from 'mustache'
 
 function calcSortDirection() {
   const $active = getActive()
@@ -130,7 +133,7 @@ function switchPart(next: boolean) {
   return $nextActive.find('a').get(0)?.href
 }
 
-const iframePlayer = defineIframePlayer({
+export const iframePlayer = defineIframePlayer({
   iframeSelector: '.video_play_wrapper iframe',
   getActive,
   setActive: (href) => {
@@ -149,6 +152,113 @@ const iframePlayer = defineIframePlayer({
   },
   getEpisodeList: () => $('.video_detail_episode a'),
   getSwitchEpisodeURL: (next) => switchPart(next),
+  subscribe: {
+    storageKey: 'agefans-subscribe',
+    getId: () => window.location.pathname.match(/play\/(\d+)/)![1],
+    async getAnimeUpdateInfo(id, sm) {
+      const html = await fetch(`/detail/${id}/`).then((res) => res.text())
+      const $doc = $(html)
+
+      const buildLabelSelector = (labels: string[]) =>
+        labels
+          .map((label) => `.detail_imform_tag:contains('${label}')`)
+          .join(',')
+
+      const getLabelValue = ($context: JQuery, keywords: string[]) =>
+        $context
+          .find(buildLabelSelector(keywords))[0]
+          ?.nextSibling?.textContent?.trim() ?? ''
+
+      const createdAtText = getLabelValue($doc, ['首播时间'])
+      const statusText = getLabelValue($doc, ['播放状态'])
+
+      const $lists = $doc.find('.video_detail_episode')
+      const longest = $lists.get().reduce((max, el) => {
+        return max.children.length >= el.children.length ? max : el
+      }, $lists[0])
+      const $last = $(longest).find('li a').last()
+
+      let updatedAt: number
+      const sub = sm.getSubscription(id)
+      if (sub) {
+        if (sub.last.url !== $last.attr('href')!) {
+          updatedAt = closestSameDay(createdAtText).getTime()
+        } else {
+          updatedAt = sub.updatedAt
+        }
+      } else {
+        updatedAt = closestSameDay(createdAtText).getTime()
+      }
+
+      return {
+        updatedAt,
+        status: statusText,
+        last: { title: $last.text(), url: $last.attr('href')! },
+      }
+    },
+    renderSubscribedAnimes: function ($root, sm) {
+      const grouped = sm.getSubscriptionsSortedByDay()
+
+      $root.html(T.subList)
+      $root.insertBefore('.weekly_list')
+
+      if (!sm.getSubscriptions().length) {
+        const $list = $(mustache.render(T.subListContent, { day: '' }))
+        $root.find('#subList').append($list)
+      }
+
+      grouped.forEach(({ list, day }, idx) => {
+        if (!list.length) return
+
+        const $list = $(mustache.render(T.subListContent, { day }))
+        $list.removeAttr('id')
+        $list.find('.text_list_item').empty()
+        list.forEach((sub) => {
+          const $item = $(mustache.render(T.subItem, sub))
+          $item.removeAttr('id')
+          $list.find('.text_list_item').append($item)
+        })
+
+        $root.find('#subList').append($list)
+      })
+
+      $root.find('.force-update').on('click', async () => {
+        iframePlayer.subscribe.checkSubscriptionsUpdates(true)
+      })
+    },
+    renderSubscribeBtn($btn, sm) {
+      const id = this.getId()
+      const sub = sm.getSubscription(id)
+      $btn.on('click', async () => {
+        $btn.text('处理中...')
+        if (sub) {
+          sm.deleteSubscription(id)
+        } else {
+          const updateInfo = await this.getAnimeUpdateInfo(id, sm)
+          const $current = getActive()
+
+          sm.createSubscription({
+            id,
+            title: $(
+              '.video_detail_wrapper .cata_video_item .card-title'
+            ).text(),
+            url: $('.player-title-link').attr('href')!,
+            thumbnail: $('.video_thumbs').attr('src')!,
+            createdAt: Date.now(),
+            checkedAt: Date.now(),
+            current: {
+              title: $current.text(),
+              url: $current.find('a').attr('href')!,
+            },
+            ...updateInfo,
+          })
+        }
+      })
+
+      $btn.addClass('btn video_detail_meta float-end')
+      $btn.insertAfter($('.video_detail_meta.feedback-popover.float-end'))
+    },
+  },
 })
 
 export function playModule() {
